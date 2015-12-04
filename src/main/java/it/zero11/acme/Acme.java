@@ -148,6 +148,9 @@ public class Acme {
 					.head();
 			nextNonce = initialNonceResponse.getHeaderString(HEADER_REPLAY_NONCE);
 		}
+		
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 2: Register a new account with CA
 		 */
@@ -169,7 +172,9 @@ public class Acme {
 
 			registrationURI = registrationResponse.getHeaderString(HttpHeaders.LOCATION);
 		}
-
+		
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 3: Ask CA a challenge for our domain
 		 */
@@ -242,6 +247,8 @@ public class Acme {
 			}
 		}
 
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 4: Ask CA to verify challenge
 		 */
@@ -258,7 +265,9 @@ public class Acme {
 				throw new AcmeException("Failed to post challenge.", answerToChallengeResponse);
 			}
 		}
-
+		
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 5: Waiting for challenge verification
 		 */
@@ -293,14 +302,18 @@ public class Acme {
 
 			challengeListener.challengeCompleted(domain);
 		}
-
+		
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 6: Generate CSR
 		 */
 		KeyPair domainKey = certificateStorage.getDomainKeyPair(domain);
 		final PKCS10CertificationRequest csr = X509Utils.generateCSR(domain, domainKey);
 		certificateStorage.saveCSR(domain, csr);
-
+		
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 7: Ask for new certificate
 		 */
@@ -322,7 +335,9 @@ public class Acme {
 				throw new AcmeException("Failed to download certificate.", newCertificateResponse);
 			}
 		}
-
+		
+		Thread.sleep(1000L);
+		
 		/**
 		 * Step 8: Fetch new certificate (if not already returned)
 		 */
