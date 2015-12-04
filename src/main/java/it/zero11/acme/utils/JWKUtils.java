@@ -16,10 +16,16 @@
 
 package it.zero11.acme.utils;
 
+import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.TreeMap;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.jsonwebtoken.impl.TextCodec;
 
@@ -50,8 +56,8 @@ public class JWKUtils {
         return resizedBytes;
     }
 
-	public static Object getWebKey(PublicKey publicKey) {
-		TreeMap<String, String> key = new TreeMap<>();
+	public static TreeMap<String, Object> getWebKey(PublicKey publicKey) {
+		TreeMap<String, Object> key = new TreeMap<>();
 		if (publicKey instanceof RSAPublicKey){
 			key.put("kty","RSA");
 			key.put("e", TextCodec.BASE64URL.encode(toIntegerBytes(((RSAPublicKey) publicKey).getPublicExponent())));
@@ -59,6 +65,29 @@ public class JWKUtils {
 			return key;
 		}else{
 			throw new IllegalArgumentException();
+		}
+	}
+	
+	public static String getWebKeyThumbprintSHA256(PublicKey publicKey){
+		try {
+			TreeMap<String, Object> webKey = JWKUtils.getWebKey(publicKey);
+			String webKeyJson = new ObjectMapper().writeValueAsString(webKey);
+			return TextCodec.BASE64URL.encode(SHA256(webKeyJson));
+		} catch (JsonProcessingException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static byte[] SHA256(String text){
+		try {
+			MessageDigest md;
+			md = MessageDigest.getInstance("SHA-256");
+			md.update(text.getBytes("UTF-8"), 0, text.length());
+			return md.digest();
+		} catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		} catch (UnsupportedEncodingException e) {
+			throw new RuntimeException(e);
 		}
 	}
 

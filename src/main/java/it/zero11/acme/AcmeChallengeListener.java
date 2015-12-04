@@ -18,7 +18,7 @@ package it.zero11.acme;
 
 public interface AcmeChallengeListener {
 
-	boolean challengeSimpleHTTP(String domain, String token, String challengeURI, String challengeBody);
+	boolean challengeHTTP01(String domain, String token, String challengeURI, String challengeBody);
 
 	void challengeCompleted(String domain);
 

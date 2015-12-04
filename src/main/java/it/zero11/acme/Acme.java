@@ -60,8 +60,9 @@ public class Acme {
 	private static final String CHALLENGE_STATUS_VALID = "valid";
 	private static final String CHALLENGE_TLS_KEY = "tls";
 	private static final String CHALLENGE_TOKEN_KEY = "token";
+	private static final String CHALLENGE_KEY_AUTHORIZATION_KEY = "keyAuthorization";
 	private static final String CHALLENGE_TYPE_KEY = "type";
-	private static final String CHALLENGE_TYPE_SIMPLE_HTTP = "simpleHttp";
+	private static final String CHALLENGE_TYPE_HTTP_01 = "http-01";
 	private static final String CHALLENGE_URI_KEY = "uri";
 	private static final String CHALLENGES_KEY = "challenges";
 	private static final String CONTACT_KEY = "contact";
@@ -173,6 +174,7 @@ public class Acme {
 		 * Step 3: Ask CA a challenge for our domain
 		 */
 		String challengeURI = null;
+		String challengeToken = null;
 		{
 			Response authorizationResponse = getRestClient()
 					.target(certificationAuthorityURI)
@@ -231,6 +233,7 @@ public class Acme {
 
 				if (handleChallenge(userKey, domain, challengeType, token, uri)){
 					challengeURI = uri;
+					challengeToken = token;
 					break;
 				}
 			}
@@ -247,7 +250,7 @@ public class Acme {
 					.target(challengeURI)
 					.request()
 					.accept(MediaType.APPLICATION_JSON)
-					.post(Entity.entity(getSimpleHTTPChallengeRequest(userKey, nextNonce), MediaType.APPLICATION_JSON));
+					.post(Entity.entity(getHTTP01ChallengeRequest(userKey, challengeToken, nextNonce), MediaType.APPLICATION_JSON));
 
 			nextNonce = answerToChallengeResponse.getHeaderString(HEADER_REPLAY_NONCE);
 
@@ -397,27 +400,21 @@ public class Acme {
 		}
 	}
 
-	@SuppressWarnings("serial")
-	protected String getSimpleHTTPChallengeFileContent(final KeyPair userKey, final String token) {
-		return Jwts.builder()
-				.setClaims(new TreeMap<String, Object>(){{
-					put(CHALLENGE_TYPE_KEY, CHALLENGE_TYPE_SIMPLE_HTTP);
-					put(CHALLENGE_TOKEN_KEY, token);
-					put(CHALLENGE_TLS_KEY, true);
-				}})
-				.signWith(getJWSSignatureAlgorithm(), userKey.getPrivate())
-				.compact();
+	protected String getHTTP01ChallengeContent(final KeyPair userKey, final String token) {
+		return token + "." + JWKUtils.getWebKeyThumbprintSHA256(userKey.getPublic());
 	}
 
 	@SuppressWarnings("serial")
-	protected String getSimpleHTTPChallengeRequest(final KeyPair userKey, final String nonce) {
+	protected String getHTTP01ChallengeRequest(final KeyPair userKey, final String token, final String nonce) {
 		return Jwts.builder()
 				.setHeaderParam(NONCE_KEY, nonce)
 				.setHeaderParam(JwsHeader.JSON_WEB_KEY, JWKUtils.getWebKey(userKey.getPublic()))
 				.setClaims(new TreeMap<String, Object>(){{
 					put(RESOURCE_KEY, RESOURCE_CHALLENGE);
-					put(CHALLENGE_TYPE_KEY, CHALLENGE_TYPE_SIMPLE_HTTP);
+					put(CHALLENGE_TYPE_KEY, CHALLENGE_TYPE_HTTP_01);
 					put(CHALLENGE_TLS_KEY, true);
+					put(CHALLENGE_KEY_AUTHORIZATION_KEY, getHTTP01ChallengeContent(userKey, token));
+					put(CHALLENGE_TOKEN_KEY, token);
 				}})
 				.signWith(getJWSSignatureAlgorithm(), userKey.getPrivate())
 				.compact();
@@ -441,8 +438,8 @@ public class Acme {
 
 	private boolean handleChallenge(KeyPair userKey, String domain, String challengeType, String token, String challengeURI) {
 		switch(challengeType){
-		case CHALLENGE_TYPE_SIMPLE_HTTP:
-			return challengeListener.challengeSimpleHTTP(domain, token, challengeURI, getSimpleHTTPChallengeFileContent(userKey, token));
+		case CHALLENGE_TYPE_HTTP_01:
+			return challengeListener.challengeHTTP01(domain, token, challengeURI, getHTTP01ChallengeContent(userKey, token));
 		default:
 			return false;
 		}
