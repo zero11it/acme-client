@@ -1,7 +1,7 @@
 # Java ACME Client
 
 Java ACME Client is a ACME (Automated Certificate Management Environment) implementation.
-See RFC Draft for more details: https://www.ietf.org/id/draft-barnes-acme-04.txt 
+See RFC Draft for more details: https://tools.ietf.org/html/draft-ietf-acme-acme-01
 This protocol is currently used to automate X509 Certificates by [Let's Encrypt CA](https://letsencrypt.org).
 
 ## Download release
@@ -11,6 +11,9 @@ There is currently no binary release available, we are planning to release it to
 ## Release note
 
 The current version supports ONLY certificate creation. Credential recovery and certificate revocation are currently not supported.
+
+### Version 0.1.1
+- Added support for new http-01 challenge
 
 ### Version 0.1.0
 - First Public Release
