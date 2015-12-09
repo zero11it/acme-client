@@ -22,12 +22,14 @@ import it.zero11.acme.utils.X509Utils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.security.KeyManagementException;
 import java.security.KeyPair;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.TreeMap;
+import java.util.logging.Logger;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -105,16 +107,22 @@ public class Acme {
 	private final String certificationAuthorityURI;
 	private final AcmeChallengeListener challengeListener;
 	private final boolean trustAllCertificate;
+	private final boolean debugHttpRequests;
 
-	public Acme(String certificationAuthorityURI, CertificateStorage storage, AcmeChallengeListener challengeListener){
-		this(certificationAuthorityURI, storage, challengeListener, false);
+	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, AcmeChallengeListener challengeListener){
+		this(certificationAuthorityURI, certificateStorage, challengeListener, false, false);
 	}
 
 	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, AcmeChallengeListener challengeListener, boolean trustAllCertificate) {
+		this(certificationAuthorityURI, certificateStorage, challengeListener, trustAllCertificate, false);
+	}
+	
+	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, AcmeChallengeListener challengeListener, boolean trustAllCertificate, boolean debugHttpRequests){
 		this.certificationAuthorityURI = certificationAuthorityURI;
 		this.certificateStorage = certificateStorage;
 		this.challengeListener = challengeListener;
 		this.trustAllCertificate = trustAllCertificate;
+		this.debugHttpRequests = debugHttpRequests;
 	}
 
 	@SuppressWarnings("serial")
@@ -331,6 +339,8 @@ public class Acme {
 				if (newCertificateResponse.getLength() > 0){
 					return extractCertificate(domain, (InputStream) newCertificateResponse.getEntity());
 				}
+			}else if (newCertificateResponse.getStatus() == 429){
+				throw new AcmeException("You are rate limited.", newCertificateResponse);
 			}else{
 				throw new AcmeException("Failed to download certificate.", newCertificateResponse);
 			}
@@ -409,6 +419,17 @@ public class Acme {
 	protected Client getRestClient(){
 		try{
 			Client client = ClientBuilder.newBuilder().sslContext((trustAllCertificate) ? getTrustAllCertificateSSLContext() : SSLContext.getDefault()).build();
+			
+			if (debugHttpRequests){
+				try{
+					Class<?> clazz = Class.forName("org.glassfish.jersey.filter.LoggingFilter");
+					Constructor<?> contructor = clazz.getConstructor(Logger.class, boolean.class);
+					client.register(contructor.newInstance(Logger.getLogger("it.zero11.acme"), true));
+				}catch(Exception e){
+					
+				}
+			}
+			
 			return client;
 		}catch(NoSuchAlgorithmException | KeyManagementException e){
 			throw new AcmeException(e);
