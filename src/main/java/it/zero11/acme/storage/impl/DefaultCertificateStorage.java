@@ -51,9 +51,15 @@ public class DefaultCertificateStorage implements CertificateStorage {
 	}
 
 	@Override
-	public KeyPair getDomainKeyPair(String domain) {
+	public KeyPair getDomainKeyPair(String[] domains) {
 		try {
-			return getKeyPair(new File(domain + ".key"), WEBSITE_KEY_SIZE);
+			KeyPair pair = getKeyPair(new File(domains[0] + ".key"), WEBSITE_KEY_SIZE);
+			if (domains.length > 1){
+				for (String domain:domains){
+					overrideKeyPairIfDifferent(new File(domain + ".key"), pair);
+				}
+			}
+			return pair;
 		} catch (NoSuchAlgorithmException|IOException e) {
 			throw new CertificateStorageException(e);
 		}
@@ -68,6 +74,24 @@ public class DefaultCertificateStorage implements CertificateStorage {
 		}
 	}
 
+	private void overrideKeyPairIfDifferent(File filePrivateKey, KeyPair pair) throws IOException {
+		if (filePrivateKey.exists()){
+			KeyPair existing;
+			try(InputStream privateKeyInputStream = new FileInputStream(filePrivateKey)){
+				existing = X509Utils.loadPEMKeyPair(privateKeyInputStream);
+			}
+			if (!existing.equals(pair)){
+				try(OutputStream outputStream = new FileOutputStream(filePrivateKey)){
+					X509Utils.savePEM(outputStream, pair);
+				}
+			}
+		}else{
+			try(OutputStream outputStream = new FileOutputStream(filePrivateKey)){
+				X509Utils.savePEM(outputStream, pair);
+			}
+		}
+	}
+	
 	private KeyPair getKeyPair(File filePrivateKey, int size) throws IOException, NoSuchAlgorithmException {
 		if (filePrivateKey.exists()){
 			try(InputStream privateKeyInputStream = new FileInputStream(filePrivateKey)){
@@ -83,11 +107,13 @@ public class DefaultCertificateStorage implements CertificateStorage {
 	}
 
 	@Override
-	public void saveCertificate(String domain, X509Certificate certificate) {
-		try(OutputStream outputStream = new FileOutputStream(domain + ".crt")) {
-			X509Utils.savePEM(outputStream, certificate);
-		} catch (IOException e) {
-			throw new CertificateStorageException(e);
+	public void saveCertificate(String[] domains, X509Certificate certificate) {
+		for (String domain:domains){
+			try(OutputStream outputStream = new FileOutputStream(domain + ".crt")) {
+				X509Utils.savePEM(outputStream, certificate);
+			} catch (IOException e) {
+				throw new CertificateStorageException(e);
+			}
 		}
 		if (saveCAIntermediateCertificate){
 			try{
@@ -99,8 +125,10 @@ public class DefaultCertificateStorage implements CertificateStorage {
 						certParser.engineInit(is);
 						caIntermediateCertificate =  (X509CertificateObject) certParser.engineRead();
 					}
-					try(OutputStream outputStream = new FileOutputStream(domain + ".chain.crt")) {
-						X509Utils.savePEM(outputStream, caIntermediateCertificate);
+					for (String domain:domains){
+						try(OutputStream outputStream = new FileOutputStream(domain + ".chain.crt")) {
+							X509Utils.savePEM(outputStream, caIntermediateCertificate);
+						}
 					}
 				}
 			}catch (IOException|StreamParsingException e) {
@@ -110,11 +138,13 @@ public class DefaultCertificateStorage implements CertificateStorage {
 	}
 
 	@Override
-	public void saveCSR(String domain, PKCS10CertificationRequest csr) {
-		try(OutputStream outputStream = new FileOutputStream(domain + ".csr")) {
-			X509Utils.savePEM(outputStream, csr);
-		} catch (IOException e) {
-			throw new CertificateStorageException(e);
+	public void saveCSR(String[] domains, PKCS10CertificationRequest csr) {
+		for (String domain:domains){
+			try(OutputStream outputStream = new FileOutputStream(domain + ".csr")) {
+				X509Utils.savePEM(outputStream, csr);
+			} catch (IOException e) {
+				throw new CertificateStorageException(e);
+			}
 		}
 	}
 }

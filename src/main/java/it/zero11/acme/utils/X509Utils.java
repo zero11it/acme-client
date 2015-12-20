@@ -25,16 +25,22 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.ASN1Primitive;
 import org.bouncycastle.asn1.ASN1Sequence;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.asn1.x509.AccessDescription;
 import org.bouncycastle.asn1.x509.AuthorityInformationAccess;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.ExtensionsGenerator;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
@@ -50,10 +56,20 @@ import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 public class X509Utils {
 	public static final String DEFAULT_ALGHORITM = "RSA";
 
-	public static PKCS10CertificationRequest generateCSR(String commonName, KeyPair pair) throws OperatorCreationException {
+	public static PKCS10CertificationRequest generateCSR(String[] commonNames, KeyPair pair) throws OperatorCreationException, IOException {
 		X500NameBuilder namebuilder = new X500NameBuilder(X500Name.getDefaultStyle());
-		namebuilder.addRDN(BCStyle.CN, commonName);
+		namebuilder.addRDN(BCStyle.CN, commonNames[0]);
+		
+		List<GeneralName> subjectAltNames = new ArrayList<>(commonNames.length);
+		for (String cn:commonNames)
+			subjectAltNames.add(new GeneralName(GeneralName.dNSName, cn));
+		GeneralNames subjectAltName = new GeneralNames(subjectAltNames.toArray(new GeneralName[0]));         
+		
+		ExtensionsGenerator extGen = new ExtensionsGenerator();
+		extGen.addExtension(Extension.subjectAlternativeName, false, subjectAltName.toASN1Primitive());
+		
 		PKCS10CertificationRequestBuilder p10Builder = new JcaPKCS10CertificationRequestBuilder(namebuilder.build(), pair.getPublic());
+		p10Builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extGen.generate());
 		JcaContentSignerBuilder csBuilder = new JcaContentSignerBuilder("SHA256withRSA");
 		ContentSigner signer = csBuilder.build(pair.getPrivate());
 		PKCS10CertificationRequest request = p10Builder.build(signer);

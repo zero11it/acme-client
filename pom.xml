@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>it.zero11</groupId>
 	<artifactId>acme-client</artifactId>
-	<version>0.1.1</version>
+	<version>0.1.2</version>
 
 	<name>Java ACME Client</name>
 	<description>Java ACME Client is a ACME (Automated Certificate Management Environment) implementation</description>

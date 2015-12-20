@@ -12,6 +12,9 @@ There is currently no binary release available, we are planning to release it to
 
 The current version supports ONLY certificate creation. Credential recovery and certificate revocation are currently not supported.
 
+### Version 0.1.2
+- Added support for SAN certificates
+
 ### Version 0.1.1
 - Added support for new http-01 challenge
 

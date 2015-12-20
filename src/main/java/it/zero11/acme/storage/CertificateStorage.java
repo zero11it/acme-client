@@ -25,10 +25,10 @@ public interface CertificateStorage {
 
 	KeyPair getUserKeyPair();
 
-	void saveCertificate(String domain, X509Certificate certificate);
+	void saveCertificate(String[] domains, X509Certificate certificate);
 
-	void saveCSR(String domain, PKCS10CertificationRequest csr);
+	void saveCSR(String[] domains, PKCS10CertificationRequest csr);
 
-	KeyPair getDomainKeyPair(String domain);
+	KeyPair getDomainKeyPair(String[] domains);
 
 }

@@ -105,22 +105,20 @@ public class Acme {
 
 	private final CertificateStorage certificateStorage; 
 	private final String certificationAuthorityURI;
-	private final AcmeChallengeListener challengeListener;
 	private final boolean trustAllCertificate;
 	private final boolean debugHttpRequests;
 
-	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, AcmeChallengeListener challengeListener){
-		this(certificationAuthorityURI, certificateStorage, challengeListener, false, false);
+	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage){
+		this(certificationAuthorityURI, certificateStorage, false, false);
 	}
 
-	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, AcmeChallengeListener challengeListener, boolean trustAllCertificate) {
-		this(certificationAuthorityURI, certificateStorage, challengeListener, trustAllCertificate, false);
+	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, boolean trustAllCertificate) {
+		this(certificationAuthorityURI, certificateStorage, trustAllCertificate, false);
 	}
 	
-	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, AcmeChallengeListener challengeListener, boolean trustAllCertificate, boolean debugHttpRequests){
+	public Acme(String certificationAuthorityURI, CertificateStorage certificateStorage, boolean trustAllCertificate, boolean debugHttpRequests){
 		this.certificationAuthorityURI = certificationAuthorityURI;
 		this.certificateStorage = certificateStorage;
-		this.challengeListener = challengeListener;
 		this.trustAllCertificate = trustAllCertificate;
 		this.debugHttpRequests = debugHttpRequests;
 	}
@@ -141,7 +139,7 @@ public class Acme {
 				.compact();
 	}
 
-	public X509Certificate getCertificate(final String domain, final String agreement, final String[] contacts) throws IOException, InterruptedException, OperatorCreationException, StreamParsingException{
+	public X509Certificate getCertificate(final String[] domains, final String agreement, final String[] contacts, AcmeChallengeListener challengeListener) throws IOException, InterruptedException, OperatorCreationException, StreamParsingException{
 		KeyPair userKey = certificateStorage.getUserKeyPair();
 
 		/**
@@ -183,142 +181,144 @@ public class Acme {
 		
 		Thread.sleep(1000L);
 		
-		/**
-		 * Step 3: Ask CA a challenge for our domain
-		 */
-		String challengeURI = null;
-		String challengeToken = null;
-		{
-			Response authorizationResponse = getRestClient()
-					.target(certificationAuthorityURI)
-					.path(RESOURCE_NEW_AUTHZ)
-					.request()
-					.accept(MediaType.APPLICATION_JSON)
-					.post(Entity.entity(getAuthorizationRequest(userKey, nextNonce, domain), MediaType.APPLICATION_JSON));
-
-			nextNonce = authorizationResponse.getHeaderString(HEADER_REPLAY_NONCE);
-
-			if (authorizationResponse.getStatus() == Status.FORBIDDEN.getStatusCode()){
-				if (agreement != null){
-					/**
-					 * Step 3b: sign new agreement
-					 */
-					Response updateRegistrationResponse = getRestClient()
-							.target(registrationURI)
-							.request()
-							.accept(MediaType.APPLICATION_JSON)
-							.post(Entity.entity(getUpdateRegistrationRequest(userKey, nextNonce, agreement, contacts), MediaType.APPLICATION_JSON));
-
-					nextNonce = updateRegistrationResponse.getHeaderString(HEADER_REPLAY_NONCE);
-
-					if (updateRegistrationResponse.getStatus() != Status.ACCEPTED.getStatusCode()){
-						throw new AcmeException("Registration failed.", updateRegistrationResponse);
-					}
-
-					/**
-					 * Step 3c: Ask CA a challenge for our domain after agreement update
-					 */
-					authorizationResponse = getRestClient()
-							.target(certificationAuthorityURI)
-							.path(RESOURCE_NEW_AUTHZ)
-							.request()
-							.accept(MediaType.APPLICATION_JSON)
-							.post(Entity.entity(getAuthorizationRequest(userKey, nextNonce, domain), MediaType.APPLICATION_JSON));
-
-					nextNonce = authorizationResponse.getHeaderString(HEADER_REPLAY_NONCE);
-
-					if (authorizationResponse.getStatus() != Status.CREATED.getStatusCode()){
+		for (String domain:domains){
+			/**
+			 * Step 3: Ask CA a challenge for our domain
+			 */
+			String challengeURI = null;
+			String challengeToken = null;
+			{
+				Response authorizationResponse = getRestClient()
+						.target(certificationAuthorityURI)
+						.path(RESOURCE_NEW_AUTHZ)
+						.request()
+						.accept(MediaType.APPLICATION_JSON)
+						.post(Entity.entity(getAuthorizationRequest(userKey, nextNonce, domain), MediaType.APPLICATION_JSON));
+	
+				nextNonce = authorizationResponse.getHeaderString(HEADER_REPLAY_NONCE);
+	
+				if (authorizationResponse.getStatus() == Status.FORBIDDEN.getStatusCode()){
+					if (agreement != null){
+						/**
+						 * Step 3b: sign new agreement
+						 */
+						Response updateRegistrationResponse = getRestClient()
+								.target(registrationURI)
+								.request()
+								.accept(MediaType.APPLICATION_JSON)
+								.post(Entity.entity(getUpdateRegistrationRequest(userKey, nextNonce, agreement, contacts), MediaType.APPLICATION_JSON));
+	
+						nextNonce = updateRegistrationResponse.getHeaderString(HEADER_REPLAY_NONCE);
+	
+						if (updateRegistrationResponse.getStatus() != Status.ACCEPTED.getStatusCode()){
+							throw new AcmeException("Registration failed.", updateRegistrationResponse);
+						}
+	
+						/**
+						 * Step 3c: Ask CA a challenge for our domain after agreement update
+						 */
+						authorizationResponse = getRestClient()
+								.target(certificationAuthorityURI)
+								.path(RESOURCE_NEW_AUTHZ)
+								.request()
+								.accept(MediaType.APPLICATION_JSON)
+								.post(Entity.entity(getAuthorizationRequest(userKey, nextNonce, domain), MediaType.APPLICATION_JSON));
+	
+						nextNonce = authorizationResponse.getHeaderString(HEADER_REPLAY_NONCE);
+	
+						if (authorizationResponse.getStatus() != Status.CREATED.getStatusCode()){
+							throw new AcmeException("Client unautorized. May need to accept new terms.", authorizationResponse);
+						}
+					}else{
 						throw new AcmeException("Client unautorized. May need to accept new terms.", authorizationResponse);
 					}
-				}else{
-					throw new AcmeException("Client unautorized. May need to accept new terms.", authorizationResponse);
+				}else if (authorizationResponse.getStatus() != Status.CREATED.getStatusCode()){
+					throw new AcmeException("Failed to create new authorization request.", authorizationResponse);
 				}
-			}else if (authorizationResponse.getStatus() != Status.CREATED.getStatusCode()){
-				throw new AcmeException("Failed to create new authorization request.", authorizationResponse);
-			}
-
-			JsonNode authorizationResponseJson = new ObjectMapper().readTree((InputStream)authorizationResponse.getEntity());
-
-			for (JsonNode challange:authorizationResponseJson.get(CHALLENGES_KEY)){
-				String challengeType = challange.get(CHALLENGE_TYPE_KEY).asText();
-				String token = challange.get(CHALLENGE_TOKEN_KEY).asText();
-				String uri = challange.get(CHALLENGE_URI_KEY).asText();
-
-				if (handleChallenge(userKey, domain, challengeType, token, uri)){
-					challengeURI = uri;
-					challengeToken = token;
-					break;
+	
+				JsonNode authorizationResponseJson = new ObjectMapper().readTree((InputStream)authorizationResponse.getEntity());
+	
+				for (JsonNode challange:authorizationResponseJson.get(CHALLENGES_KEY)){
+					String challengeType = challange.get(CHALLENGE_TYPE_KEY).asText();
+					String token = challange.get(CHALLENGE_TOKEN_KEY).asText();
+					String uri = challange.get(CHALLENGE_URI_KEY).asText();
+	
+					if (handleChallenge(userKey, domain, challengeListener, challengeType, token, uri)){
+						challengeURI = uri;
+						challengeToken = token;
+						break;
+					}
+				}
+				if (challengeURI == null){
+					throw new AcmeException("No challenge completed.");
 				}
 			}
-			if (challengeURI == null){
-				throw new AcmeException("No challenge completed.");
-			}
-		}
-
-		Thread.sleep(1000L);
-		
-		/**
-		 * Step 4: Ask CA to verify challenge
-		 */
-		{
-			Response answerToChallengeResponse = getRestClient()
-					.target(challengeURI)
-					.request()
-					.accept(MediaType.APPLICATION_JSON)
-					.post(Entity.entity(getHTTP01ChallengeRequest(userKey, challengeToken, nextNonce), MediaType.APPLICATION_JSON));
-
-			nextNonce = answerToChallengeResponse.getHeaderString(HEADER_REPLAY_NONCE);
-
-			if (answerToChallengeResponse.getStatus() != Status.ACCEPTED.getStatusCode()){
-				throw new AcmeException("Failed to post challenge.", answerToChallengeResponse);
-			}
-		}
-		
-		Thread.sleep(1000L);
-		
-		/**
-		 * Step 5: Waiting for challenge verification
-		 */
-		{
-			int validateChallengeRetryCount = 12;
-			while (--validateChallengeRetryCount > 0){
-				Thread.sleep(10000L);
-
-				Response validateChallengeResponse = getRestClient()
+	
+			Thread.sleep(1000L);
+			
+			/**
+			 * Step 4: Ask CA to verify challenge
+			 */
+			{
+				Response answerToChallengeResponse = getRestClient()
 						.target(challengeURI)
 						.request()
 						.accept(MediaType.APPLICATION_JSON)
-						.get();
-				if (validateChallengeResponse.getStatus() == Status.ACCEPTED.getStatusCode()){
-					JsonNode validateChallengeJson = new ObjectMapper().readTree((InputStream)validateChallengeResponse.getEntity());
-					String status = validateChallengeJson.get(CHALLENGE_STATUS_KEY).asText();
-					if (status.equals(CHALLENGE_STATUS_VALID)){
-						validateChallengeRetryCount = -1;
-					}else if(!status.equals(CHALLENGE_STATUS_PENDING)){
-						challengeListener.challengeFailed(domain);
-						throw new AcmeException("Failed verify challenge. Status: " + status, validateChallengeResponse);
-					}
-				}else{
-					challengeListener.challengeFailed(domain);
-					throw new AcmeException("Failed verify challenge.", validateChallengeResponse);
+						.post(Entity.entity(getHTTP01ChallengeRequest(userKey, challengeToken, nextNonce), MediaType.APPLICATION_JSON));
+	
+				nextNonce = answerToChallengeResponse.getHeaderString(HEADER_REPLAY_NONCE);
+	
+				if (answerToChallengeResponse.getStatus() != Status.ACCEPTED.getStatusCode()){
+					throw new AcmeException("Failed to post challenge.", answerToChallengeResponse);
 				}
 			}
-			if (validateChallengeRetryCount == 0){
-				challengeListener.challengeFailed(domain);
-				throw new AcmeException("Failed verify challenge. Timeout.");
+			
+			Thread.sleep(1000L);
+			
+			/**
+			 * Step 5: Waiting for challenge verification
+			 */
+			{
+				int validateChallengeRetryCount = 20;
+				while (--validateChallengeRetryCount > 0){
+					Thread.sleep(5000L);
+	
+					Response validateChallengeResponse = getRestClient()
+							.target(challengeURI)
+							.request()
+							.accept(MediaType.APPLICATION_JSON)
+							.get();
+					if (validateChallengeResponse.getStatus() == Status.ACCEPTED.getStatusCode()){
+						JsonNode validateChallengeJson = new ObjectMapper().readTree((InputStream)validateChallengeResponse.getEntity());
+						String status = validateChallengeJson.get(CHALLENGE_STATUS_KEY).asText();
+						if (status.equals(CHALLENGE_STATUS_VALID)){
+							validateChallengeRetryCount = -1;
+						}else if(!status.equals(CHALLENGE_STATUS_PENDING)){
+							challengeListener.challengeFailed(domain);
+							throw new AcmeException("Failed verify challenge. Status: " + status, validateChallengeResponse);
+						}
+					}else{
+						challengeListener.challengeFailed(domain);
+						throw new AcmeException("Failed verify challenge.", validateChallengeResponse);
+					}
+				}
+				if (validateChallengeRetryCount == 0){
+					challengeListener.challengeFailed(domain);
+					throw new AcmeException("Failed verify challenge. Timeout.");
+				}
+	
+				challengeListener.challengeCompleted(domain);
 			}
-
-			challengeListener.challengeCompleted(domain);
+			
+			Thread.sleep(1000L);
 		}
-		
-		Thread.sleep(1000L);
 		
 		/**
 		 * Step 6: Generate CSR
 		 */
-		KeyPair domainKey = certificateStorage.getDomainKeyPair(domain);
-		final PKCS10CertificationRequest csr = X509Utils.generateCSR(domain, domainKey);
-		certificateStorage.saveCSR(domain, csr);
+		KeyPair domainKey = certificateStorage.getDomainKeyPair(domains);
+		final PKCS10CertificationRequest csr = X509Utils.generateCSR(domains, domainKey);
+		certificateStorage.saveCSR(domains, csr);
 		
 		Thread.sleep(1000L);
 		
@@ -337,7 +337,7 @@ public class Acme {
 			if (newCertificateResponse.getStatus() == Status.CREATED.getStatusCode()){
 				certificateURL = newCertificateResponse.getHeaderString(HttpHeaders.LOCATION);
 				if (newCertificateResponse.getLength() > 0){
-					return extractCertificate(domain, (InputStream) newCertificateResponse.getEntity());
+					return extractCertificate(domains, (InputStream) newCertificateResponse.getEntity());
 				}
 			}else if (newCertificateResponse.getStatus() == 429){
 				throw new AcmeException("You are rate limited.", newCertificateResponse);
@@ -352,16 +352,16 @@ public class Acme {
 		 * Step 8: Fetch new certificate (if not already returned)
 		 */
 		{
-			int downloadRetryCount = 12;
+			int downloadRetryCount = 20;
 			while(downloadRetryCount-- > 0){
-				Thread.sleep(10000L);
+				Thread.sleep(5000L);
 				Response certificateResponse = getRestClient()
 						.target(certificateURL)
 						.request()
 						.get();
 				if (certificateResponse.getStatus() == Status.CREATED.getStatusCode()){
 					if (certificateResponse.getLength() > 0){
-						return extractCertificate(domain, (InputStream) certificateResponse.getEntity());
+						return extractCertificate(domains, (InputStream) certificateResponse.getEntity());
 					}
 				}else{
 					throw new AcmeException("Failed to download certificate.", certificateResponse);
@@ -372,12 +372,12 @@ public class Acme {
 		}
 	}
 
-	private X509Certificate extractCertificate(final String domain, InputStream inputStream)
+	private X509Certificate extractCertificate(final String[] domains, InputStream inputStream)
 			throws StreamParsingException {
 		X509CertParser certParser = new X509CertParser();
 		certParser.engineInit(inputStream);
 		X509Certificate certificate = (X509Certificate) certParser.engineRead();
-		certificateStorage.saveCertificate(domain, certificate);
+		certificateStorage.saveCertificate(domains, certificate);
 		return certificate;
 	}
 
@@ -472,7 +472,7 @@ public class Acme {
 				.compact();
 	}
 
-	private boolean handleChallenge(KeyPair userKey, String domain, String challengeType, String token, String challengeURI) {
+	private boolean handleChallenge(KeyPair userKey, String domain, AcmeChallengeListener challengeListener, String challengeType, String token, String challengeURI) {
 		switch(challengeType){
 		case CHALLENGE_TYPE_HTTP_01:
 			return challengeListener.challengeHTTP01(domain, token, challengeURI, getHTTP01ChallengeContent(userKey, token));
