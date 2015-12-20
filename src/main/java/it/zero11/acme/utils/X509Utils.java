@@ -24,10 +24,18 @@ import java.io.PrintWriter;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
 
+import org.bouncycastle.asn1.ASN1OctetString;
+import org.bouncycastle.asn1.ASN1Primitive;
+import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
+import org.bouncycastle.asn1.x509.AccessDescription;
+import org.bouncycastle.asn1.x509.AuthorityInformationAccess;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
@@ -69,5 +77,16 @@ public class X509Utils {
 		try(JcaPEMWriter writer = new JcaPEMWriter(new PrintWriter(outputStream))){
 			writer.writeObject(object);
 		}
+	}
+
+	public static String getCACertificateURL(X509Certificate certificate) throws IOException {
+		byte[] bOctets = ((ASN1OctetString) ASN1Primitive.fromByteArray(certificate.getExtensionValue(Extension.authorityInfoAccess.getId()))).getOctets();
+		AuthorityInformationAccess access = AuthorityInformationAccess.getInstance(ASN1Sequence.fromByteArray(bOctets));
+		for (AccessDescription ad:access.getAccessDescriptions()){
+			if (ad.getAccessMethod().equals(X509ObjectIdentifiers.id_ad_caIssuers)){
+				return ad.getAccessLocation().getName().toString();
+			}
+		}
+		return null;
 	}
 }
