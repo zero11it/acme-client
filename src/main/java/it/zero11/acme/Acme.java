@@ -295,11 +295,11 @@ public class Acme {
 							validateChallengeRetryCount = -1;
 						}else if(!status.equals(CHALLENGE_STATUS_PENDING)){
 							challengeListener.challengeFailed(domain);
-							throw new AcmeException("Failed verify challenge. Status: " + status, validateChallengeResponse);
+							throw new AcmeException("Failed verify challenge. Domain: " + domain + " Status: " + status + " Error: " + validateChallengeJson.get("error").toString(), validateChallengeResponse);
 						}
 					}else{
 						challengeListener.challengeFailed(domain);
-						throw new AcmeException("Failed verify challenge.", validateChallengeResponse);
+						throw new AcmeException("Failed verify challenge. Domain: " + domain + " Status: Challenge not accepted", validateChallengeResponse);
 					}
 				}
 				if (validateChallengeRetryCount == 0){
